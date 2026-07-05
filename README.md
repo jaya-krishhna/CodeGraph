@@ -32,7 +32,8 @@ further — it tests the LLM connection, embeddings, ingestion, and the
 ## Running the demo
 
 ```bash
-python cli.py ingest --visualize     # ingest demo_repo, write memory/graph.html
+python cli.py ingest       # ingest demo_repo,
+python cli.py visualize    # write memory/graph.html
 python cli.py build "write a test for JWT auth"
 python cli.py fix demo_repo/db.py
 ```
@@ -85,6 +86,55 @@ hard way:
    OpenAI-compatible, which is exactly what `custom` is for. Embeddings
    use `fastembed` (local, free) since Groq doesn't serve embedding
    models.
+
+## Measured impact (from an actual run, not projected)
+
+**Read path** — query: `"write a test for JWT auth"`, against the 14-file `demo_repo`:
+
+| | tokens | % of full repo |
+|---|---|---|
+| Full repo | 3,337 | 100% |
+| Recalled | 791 | 23.7% |
+
+Recalled from exactly 3 files, all genuinely relevant: `auth/__init__.py`,
+`auth/dependencies.py`, `auth/jwt_auth.py`. `rag_service/retriever.py` —
+the deliberately-isolated file — was correctly excluded.
+
+**Write path** — changed `db.py` (renamed `Database.get()` →
+`get_by_id()`, a real breaking change, confirmed via a smoke test that
+throws a genuine `AttributeError` beforehand):
+
+- 5 candidate dependents surfaced (wide net on purpose — verification is
+  the actual safety net, not a tight `top_k`)
+- 2 genuinely broken (`crud/projects.py`, `crud/tasks.py`), fixed via one
+  Groq call each
+- 3 candidates correctly left untouched, including `rag_service/retriever.py`
+  — which surfaced as a *false positive* candidate (its own docstring
+  mentions `db.py` by name, explaining why it's *not* dependent on it —
+  enough textual overlap for recall to flag it, and exactly the kind of
+  case verification exists to catch) and was correctly never modified
+- Stale `db.py` version pruned via `forget()`; changed + fixed files
+  re-ingested automatically via the existing content-hash comparison
+
+## Known limitations / honest future work
+
+- **`cognee.improve()`'s feedback loop doesn't bridge to this project's
+  retrieval path.** `feedback_alpha` is a float weighting knob, not a
+  place to submit our per-file ground truth, and the real feedback
+  submission APIs (`add_feedback`, `add_frequency_weights`) are scoped to
+  Cognee's conversational QA/session memory (keyed by `qa_id`), not the
+  `add()`/`cognify()`/`recall(query_type=CHUNKS)` code-graph path used
+  throughout this project. Closing that loop for real would mean routing
+  dependent-finding through the QA/session subsystem instead — a
+  reasonable next step, not something faked here.
+- **Write-path verification is scripted** (see above) since `demo_repo`
+  has no real test suite. `debug/real_tests.py` is the real-pytest
+  swap-in, one flag away, the moment test files exist.
+- **Dependent-finding is semantic, not a literal import-graph
+  traversal** — it's asking `recall()` "what depends on X," which ranks
+  by relevance to that question, not by walking actual `import`
+  statements. This is why verification (not retrieval) is the real
+  correctness guarantee in the write path.
 
 ## Repo structure
 
