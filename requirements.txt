@@ -1,0 +1,11 @@
+cognee==1.2.2
+python-dotenv
+tiktoken
+fastapi
+uvicorn
+pytest
+groq
+networkx
+pyvis
+matplotlib
+fastembed
