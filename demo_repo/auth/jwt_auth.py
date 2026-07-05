@@ -13,12 +13,17 @@ import json
 import base64
 from typing import Optional
 
+import os
+from dotenv import load_dotenv
+
 from auth.models import User, TokenData, Token
 from db import get_db
 
-SECRET_KEY = "demo-secret-do-not-use-in-prod"
-ALGORITHM = "HS256"
-EXPIRE_SECONDS = 3600
+load_dotenv()
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
+EXPIRE_SECONDS = int(os.getenv("EXPIRE_SECONDS"))
 
 
 def _b64url(data: bytes) -> str:
